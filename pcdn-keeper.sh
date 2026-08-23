@@ -19,6 +19,10 @@ while true; do
       --timeout=600 \
       --retry-wait=10 \
       --max-tries=5 \
+      --disk-cache=0 \
+      --max-download-result=0 \
+      --file-allocation=none \
+      --quiet=true \
       "http://updates-http.cdn-apple.com/2019WinterFCS/fullrestores/041-39257/32129B6C-292C-11E9-9E72-4511412B0A59/iPhone_4.7_12.1.4_16D57_Restore.ipsw" || \
       echo "第${i}次下载异常，继续执行下一次..."
 
