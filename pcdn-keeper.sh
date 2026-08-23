@@ -9,7 +9,8 @@ while true; do
   RUN_TIMES=$(expr $RANDOM % 3 + 1)
   echo "$(date +'%F %T'): 本轮开启${RUN_TIMES}组，最大并发${MAX_PARALLEL}"
 
-  for ((i=0; i<${RUN_TIMES}; i++)); do
+  i=0
+  while [ ${i} -lt ${RUN_TIMES} ]; do
     curl \
       --no-progress-meter \
       --max-time 600 \
@@ -18,9 +19,12 @@ while true; do
       -o /dev/null \
       "${TARGET_URL}" 2>/dev/null &
 
+    # 控制最大并发
     while [ $(jobs | wc -l) -ge ${MAX_PARALLEL} ]; do
       sleep 0.2
     done
+
+    i=$(expr ${i} + 1)
   done
 
   wait
