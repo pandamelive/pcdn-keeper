@@ -5,7 +5,7 @@ RUN apk add --no-cache aria2 \
 
 WORKDIR /app
 
-COPY traffic-keeper.sh ./
-RUN chmod +x ./traffic-keeper.sh
+COPY pcdn-keeper.sh ./
+RUN chmod +x ./pcdn-keeper.sh
 
-ENTRYPOINT ["/app/traffic-keeper.sh"]
+ENTRYPOINT ["/app/pcdn-keeper.sh"]
