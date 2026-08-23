@@ -3,8 +3,9 @@ FROM alpine:latest
 RUN apk add --no-cache aria2 \
     && rm -rf /var/cache/apk/*
 
-COPY traffic-keeper.sh /app/traffic-keeper.sh
-RUN chmod +x /app/traffic-keeper.sh
-
 WORKDIR /app
+
+COPY traffic-keeper.sh ./
+RUN chmod +x ./traffic-keeper.sh
+
 ENTRYPOINT ["/app/traffic-keeper.sh"]
