@@ -13,7 +13,7 @@ Docker PDN流量模拟工具，aria2多线程下载，流量全部输出到 `/de
 ```yaml
 services:
   traffic-keeper:
-    image: ghcr.io/你的github用户名/pcdn-keeper:latest
+    image: ghcr.io/pandamelive/pcdn-keeper:latest
     container_name: pcdnkeeper
     restart: always
     volumes:
