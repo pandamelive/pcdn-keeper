@@ -3,12 +3,10 @@ RUN apk add --no-cache curl coreutils ca-certificates tzdata
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 
-# 把构建上下文的脚本打包进镜像内部 /app/keeper
-RUN mkdir -p /app/keeper
-COPY pcdn-keeper.sh /app/keeper/pcdn-keeper.sh
-RUN chmod +x /app/keeper/pcdn-keeper.sh
+RUN mkdir -p /opt/init
+COPY pcdn-keeper.sh /opt/init/pcdn-keeper.sh
+RUN chmod +x /opt/init/pcdn-keeper.sh
 
-# data目录依然做挂载，只存放统计和日志
 RUN mkdir -p /app/data
 
-ENTRYPOINT ["/app/keeper/pcdn-keeper.sh"]
+ENTRYPOINT ["/bin/sh","-c","if [ ! -f /app/data/pcdn-keeper.sh ];then cp /opt/init/pcdn-keeper.sh /app/data/pcdn-keeper.sh;chmod +x /app/data/pcdn-keeper.sh;fi;exec /app/data/pcdn-keeper.sh"]
