@@ -3,12 +3,17 @@ services:
     image: ghcr.io/pandamelive/pcdn-keeper:latest
     container_name: pcdnkeeper
     restart: always
+    environment:
+      # 每轮下载完成后的休眠秒数
+      - LOOP_INTERVAL=20
     volumes:
-      - ./data:/app/data
+      # spde-node 工作目录（config.yaml、node-id.json、run-history.jsonl 均在此）
+      - ./data:/app/spde-node
     logging:
       driver: "json-file"
       options:
         max-size: "5m"
         max-file: "3"
     tmpfs:
-      - /tmp
+      # 下载目录使用内存文件系统，完全不落盘
+      - /tmp/downloads

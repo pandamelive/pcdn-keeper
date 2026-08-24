@@ -1,24 +1,35 @@
 FROM alpine:latest
+
+ARG SPDE_VERSION=v0.2.1
+ARG SPDE_ARCH=x86_64-linux-musl
+
 RUN apk update && apk add --no-cache \
-    aria2 \
-    curl \
-    jq \
-    coreutils \
     ca-certificates \
     tzdata \
+    curl \
     bash
+
 ENV TZ=Asia/Shanghai
+ENV LOOP_INTERVAL=20
+
 WORKDIR /app
-RUN mkdir -p /opt/init
-COPY pcdn-keeper.sh /opt/init/pcdn-keeper.sh
-RUN sed -i 's/\r$//' /opt/init/pcdn-keeper.sh \
-    && chmod +x /opt/init/pcdn-keeper.sh
-RUN mkdir -p /app/data
-ENTRYPOINT ["/bin/bash","-c","\
-if [ ! -f /app/data/pcdn-keeper.sh ];then \
-  cp /opt/init/pcdn-keeper.sh /app/data/pcdn-keeper.sh; \
-  chmod +x /app/data/pcdn-keeper.sh; \
+
+# 下载 spde 静态二进制
+RUN curl -fSL -o /app/spde \
+    "https://github.com/pandamelive/spde/releases/download/${SPDE_VERSION}/spde-${SPDE_ARCH}" \
+    && chmod +x /app/spde
+
+# 复制入口脚本和默认配置
+COPY entrypoint.sh /opt/init/entrypoint.sh
+COPY config.yaml /opt/init/config.yaml
+
+RUN chmod +x /opt/init/entrypoint.sh \
+    && mkdir -p /app/spde-node/config /app/spde-node/data /tmp/downloads
+
+ENTRYPOINT ["/bin/bash", "-c", "\
+mkdir -p /app/spde-node/config /app/spde-node/data; \
+if [ ! -f /app/spde-node/config/config.yaml ]; then \
+  cp /opt/init/config.yaml /app/spde-node/config/config.yaml; \
 fi; \
-cd /app/data; \
-exec bash /app/data/pcdn-keeper.sh \
+exec /opt/init/entrypoint.sh \
 "]
