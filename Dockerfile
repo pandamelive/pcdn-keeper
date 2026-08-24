@@ -1,5 +1,6 @@
 FROM alpine:latest
 RUN apk add --no-cache curl coreutils ca-certificates tzdata
+RUN rm -f /bin/curl
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 
