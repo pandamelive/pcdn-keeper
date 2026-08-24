@@ -14,4 +14,20 @@ Docker PDN流量模拟工具，curl多线程下载，流量全部输出到 `/dev
 > 完整原版配置文件：[docker-compose.yml](./docker-compose.yml)
 
 <!-- COMPOSE_START -->
+```yaml
+services:
+  traffic-keeper:
+    image: ghcr.io/pandamelive/pcdn-keeper:latest
+    container_name: pcdnkeeper
+    restart: always
+    volumes:
+      - ./data:/app/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+    tmpfs:
+      - /tmp
+```
 <!-- COMPOSE_END -->
