@@ -10,20 +10,8 @@ Docker PDN流量模拟工具，curl多线程下载，流量全部输出到 `/dev
 - docker 一键部署
 
 ## 快速使用
-```yaml
-services:
-  pcdn-keeper:
-    image: ghcr.io/pandamelive/pcdn-keeper:latest
-    container_name: pcdnkeeper
-    restart: always
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
-      - ./data:/app/data
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
-    tmpfs:
-      - /tmp
+
+> 完整原版配置文件：[docker-compose.yml](./docker-compose.yml)
+
+<!-- COMPOSE_START -->
+<!-- COMPOSE_END -->
