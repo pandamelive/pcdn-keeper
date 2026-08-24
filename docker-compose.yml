@@ -4,8 +4,6 @@ services:
     container_name: pcdnkeeper
     restart: always
     volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
       - ./data:/app/data
     logging:
       driver: "json-file"
