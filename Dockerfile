@@ -1,13 +1,10 @@
-FROM alpine:latest
+FROM alpine:3.20
 
 RUN apk update && apk add --no-cache \
     python3 \
     coreutils \
     ca-certificates \
-    tzdata \
-    awk \
-    sed \
-    grep
+    tzdata
 
 ENV TZ=Asia/Shanghai
 WORKDIR /app
