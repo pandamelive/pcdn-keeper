@@ -16,7 +16,7 @@ Docker PDN流量模拟工具，curl多线程下载，流量全部输出到 `/dev
 <!-- COMPOSE_START -->
 ```yaml
 services:
-  traffic-keeper:
+  pcdn-keeper:
     image: ghcr.io/pandamelive/pcdn-keeper:latest
     container_name: pcdnkeeper
     restart: always
