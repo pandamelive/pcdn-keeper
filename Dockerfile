@@ -2,9 +2,9 @@ FROM alpine:latest
 
 RUN apk update && apk add --no-cache \
     python3 \
-    py3‑requests \
+    py3-requests \
     coreutils \
-    ca‑certificates \
+    ca-certificates \
     tzdata \
     bash
 
@@ -13,7 +13,8 @@ WORKDIR /app
 
 RUN mkdir -p /opt/init
 COPY pcdn-keeper.sh /opt/init/pcdn-keeper.sh
-RUN chmod +x /opt/init/pcdn-keeper.sh
+RUN sed -i 's/\r$//' /opt/init/pcdn-keeper.sh \
+    && chmod +x /opt/init/pcdn-keeper.sh
 
 RUN mkdir -p /app/data
 
@@ -25,3 +26,4 @@ fi; \
 cd /app/data; \
 exec bash /app/data/pcdn-keeper.sh \
 "]
+
