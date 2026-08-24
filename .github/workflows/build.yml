@@ -1,14 +1,17 @@
 name: Build & Push pcdn-keeper Docker Image
 on:
-  # 手动触发：Actions页面点按钮运行
   workflow_dispatch:
-  # 仅发布Release时触发，push代码不再触发
   release:
     types: [published]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # job失败自动重试最多3次，间隔15秒
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+    continue-on-error: false
     permissions:
       contents: read
       packages: write
@@ -27,17 +30,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
-        uses: nick-invision/retry@v3
+        uses: docker/build-push-action@v6
         with:
-          max_attempts: 3
-          retry_wait_seconds: 15
-        steps:
-          - name: Build
-            uses: docker/build-push-action@v6
-            with:
-              context: .
-              push: true
-              no-cache: true
-              tags: |
-                ghcr.io/${{ github.repository_owner }}/pcdn-keeper:latest
-                ghcr.io/${{ github.repository_owner }}/pcdn-keeper:${{ github.ref_name }}
+          context: .
+          push: true
+          no-cache: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/pcdn-keeper:latest
+            ghcr.io/${{ github.repository_owner }}/pcdn-keeper:${{ github.ref_name }}
