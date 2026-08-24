@@ -1,6 +1,14 @@
 FROM alpine:latest
-# 安装python3 + 脚本依赖，不装curl
-RUN apk add --no-cache python3 coreutils ca-certificates tzdata awk sed grep
+
+RUN apk update && apk add --no-cache \
+    python3 \
+    coreutils \
+    ca-certificates \
+    tzdata \
+    awk \
+    sed \
+    grep
+
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 
