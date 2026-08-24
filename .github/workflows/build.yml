@@ -38,9 +38,7 @@ jobs:
           push: true
           no-cache: true
           tags: |
-            # GHCR镜像
             ghcr.io/${{ github.repository_owner }}/pcdn-keeper:latest
             ghcr.io/${{ github.repository_owner }}/pcdn-keeper:${{ github.ref_name }}
-            # DockerHub镜像 格式：docker.io/用户名/仓库名:标签
             docker.io/${{ secrets.DOCKERHUB_USERNAME }}/pcdn-keeper:latest
             docker.io/${{ secrets.DOCKERHUB_USERNAME }}/pcdn-keeper:${{ github.ref_name }}
