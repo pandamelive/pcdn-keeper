@@ -16,8 +16,8 @@ global:
   skip_tls_verify: false
   # 单文件并发连接数（类似 aria2 的 split / max-connection-per-server）
   connections_per_file: 16
-  # 试运行模式（不实际下载）
-  dry_run: false
+  # 不落盘开关
+  dry_run: true
 
 output:
   # 下载保存目录，容器内对应 tmpfs（内存文件系统），不落盘
