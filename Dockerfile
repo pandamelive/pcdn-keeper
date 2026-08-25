@@ -10,7 +10,7 @@ RUN apk update && apk add --no-cache \
     bash
 
 ENV TZ=Asia/Shanghai
-ENV LOOP_INTERVAL=20
+ENV LOOP_INTERVAL=60
 
 WORKDIR /app
 
