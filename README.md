@@ -1,6 +1,8 @@
 # pcdn-keeper
 
-Docker PCDN 流量模拟工具，基于 [spde (Super-Download-Engine)](https://github.com/pandamelive/spde) 下载引擎，循环下载配置文件中的 URL 列表，数据全部写入 tmpfs（内存文件系统），**完全不写入磁盘**。
+[PK](https://github.com/pandamelive/pk) + [SPDE](https://github.com/pandamelive/spde) 最小结合体示例，一键 Docker 部署开箱即用。
+
+一个容器同时运行 **PK 主控**（Web UI + API，端口 5566）和 **SPDE Agent 节点**（自动接入本地 PK），下载数据全部写入 tmpfs（内存文件系统），**完全不写磁盘**。
 
 > 全部镜像由 GitHub Actions 自动构建，用户本地无需编译。
 
@@ -8,28 +10,34 @@ Docker PCDN 流量模拟工具，基于 [spde (Super-Download-Engine)](https://g
 
 ```
 pcdn-keeper 容器
-├── /app/spde              spde 二进制（Rust 静态二进制）
-├── /app/spde-node/        spde 工作目录（用户挂载）
-│   ├── config/config.yaml  下载任务配置
-│   └── data/
-│       ├── node-id.json     节点唯一标识
-│       └── run-history.jsonl  流量历史记录
-├── /opt/init/entrypoint.sh  循环调度器
-└── /tmp/downloads/          下载目录（tmpfs 内存）
+├── /tmp                           下载目录（tmpfs 内存，完全不落盘）
+└── /pnos/
+    ├── entrypoint.sh              双进程启动器（pk + spde agent）
+    ├── pk-config.default.yaml     默认 pk 配置模板
+    ├── download/                  SPDE 二进制目录
+    │   └── spde                   SPDE 下载引擎二进制
+    └── controlcentre/             PK 目录
+        ├── pk                     PK 主控二进制
+        └── pk-controlcenter/      PK 工作目录（持久化挂载，宿主机 ./data）
+            ├── config.yaml        PK 主控配置
+            └── pk-data/
+                ├── state.json     节点 / 任务 / 调度 / 运行记录
+                └── artifacts/     各平台 SPDE 二进制（用于下发给外部节点）
 ```
 
-- **下载引擎**：spde，多线程 HTTP 下载，支持并发任务、断点续传、重试、代理
-- **调度逻辑**：入口脚本循环调用 `spde serve`，每轮执行完所有启用的任务后休眠指定间隔
-- **不落盘**：下载目录 `/tmp/downloads` 挂载为 tmpfs，每轮结束后自动清理
+- **PK 主控**：Axum Web 服务，内置 Web UI，负责节点管理、任务调度、流量统计
+- **SPDE Agent**：以 agent 模式接入本地 PK，自动注册节点、拉取任务、回写结果
+- **不落盘**：`/tmp` 挂载为 tmpfs，spde 下载数据写入内存，完全不碰磁盘
+- **持久化**：宿主机 `./data` 映射到 pk 工作目录 `/pnos/controlcentre/pk-controlcenter`，配置和状态数据保留
 
 ## 特性
 
-- 基于 spde Rust 下载引擎，单静态二进制，性能优于 aria2
-- 全部网络数据写入内存，无磁盘 IO
-- 多并发下载，可配置单文件连接数和最大并发任务数
-- 配置文件驱动，修改任务无需重建镜像
-- 流量历史记录持久化（`run-history.jsonl`）
-- docker 一键部署
+- PK + SPDE 双二进制打包，一个容器即开即用
+- PK Web UI 可视化管理节点、创建下载任务、查看流量统计
+- SPDE Agent 自动接入本地 PK，零配置节点注册
+- 全部网络数据写入内存（tmpfs），无磁盘 IO
+- 仅 PK 工作目录（pk-controlcenter）持久化，节点数据随容器重建
+- docker compose 一键部署
 
 ## 快速使用
 
@@ -39,18 +47,20 @@ pcdn-keeper 容器
 docker compose up -d
 ```
 
-首次启动时如果配置文件不存在，容器会自动复制默认配置到 `./data/config/config.yaml`。
+首次启动时如果 PK 配置不存在，容器会自动复制默认配置到 `./data/config.yaml`。
 
-### 2. 编辑下载任务
+### 2. 打开 Web UI
+
+浏览器访问 `http://<host>:5566`，即可看到 PK 主控面板。SPDE Agent 已自动注册为在线节点。
+
+### 3. 创建下载任务
+
+在 Web UI 中创建下载任务，调度到本地节点执行。也可通过 API：
 
 ```bash
-vim ./data/config/config.yaml
-```
-
-### 3. 重启生效
-
-```bash
-docker compose restart
+curl -X POST http://127.0.0.1:5566/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"name":"测试","url":"http://example.com/file.zip","filename":"file.zip","target":"any"}'
 ```
 
 ### 4. 查看日志
@@ -65,72 +75,104 @@ docker logs -f pcdnkeeper
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `LOOP_INTERVAL` | `20` | 每轮下载完成后的休眠秒数 |
+| `PK_LISTEN` | `0.0.0.0:5566` | PK 监听地址 |
+| `PK_TOKEN` | `""` | PK API / Agent 鉴权 Bearer Token，留空则不鉴权 |
+| `SPDE_MASTER` | `http://127.0.0.1:5566` | SPDE Agent 连接的 PK 地址（通常无需修改） |
 
-### config.yaml 字段
+### PK 配置文件
 
-#### global
+挂载路径：`./data/config.yaml`
 
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `max_concurrent` | int | `4` | 最大并发下载任务数 |
-| `resume` | bool | `false` | 断点续传（PCDN 流量模拟建议关闭） |
-| `retry_times` | int | `3` | 单任务失败重试次数 |
-| `timeout` | int | `1800` | 单任务超时秒数 |
-| `skip_tls_verify` | bool | `false` | 跳过 TLS 证书验证 |
-| `connections_per_file` | int | `16` | 单文件并发连接数 |
-| `dry_run` | bool | `false` | 试运行模式（不实际下载） |
+```yaml
+listen: "0.0.0.0:5566"
+data_dir: null
+heartbeat_timeout_secs: 45
+token: ""
+spde_defaults:
+  max_concurrent: 4
+  resume: false          # PCDN 流量模拟建议关闭，每次重新下载
+  retry_times: 3
+  timeout: 1800
+  skip_tls_verify: false
+  connections_per_file: 8
+  # dry_run=true: 数据直接丢弃不落盘，仅统计速度和流量（PCDN 流量模拟推荐，安全）
+  # dry_run=false: 实际写入 save_path（tmpfs 内存，注意大文件占满内存风险）
+  dry_run: true
+  save_path: "/tmp"   # 容器内 tmpfs 目录
+  http_proxy: ""
+  https_proxy: ""
+```
 
-#### output
+修改配置后重启生效：`docker compose restart`
 
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `save_path` | string | `/tmp/downloads` | 下载保存目录（容器内为 tmpfs） |
+## 内存与落盘注意事项
 
-#### proxy
+`/tmp` 为 tmpfs 内存文件系统，下载数据写入内存而非磁盘，存在以下风险：
 
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `http_proxy` | string | `""` | HTTP 代理地址 |
-| `https_proxy` | string | `""` | HTTPS 代理地址 |
-
-#### direct_tasks
-
-任务列表，每个任务包含：
-
-| 字段 | 类型 | 说明 |
+| 配置 | 行为 | 风险 |
 |------|------|------|
-| `name` | string | 任务名称（用于日志和统计） |
-| `enable` | bool | 是否启用该任务 |
-| `url` | string | 下载地址（支持 http/https） |
-| `filename` | string | 保存文件名 |
+| `dry_run: true`（默认） | 数据直接丢弃，仅统计速度和流量 | 无内存风险，推荐 PCDN 流量模拟使用 |
+| `dry_run: false` | 实际写入 `/tmp` | 大文件可能占满 tmpfs，触发 ENOSPC 或容器 OOM |
+
+如需实际落盘下载大文件，有两种方式：
+
+1. **限制 tmpfs 上限**（防止内存爆掉）：
+   ```yaml
+   tmpfs:
+     - /tmp:size=8G
+   ```
+
+2. **改为 bind 挂载**（数据落盘到宿主机磁盘）：
+   ```yaml
+   volumes:
+     - ./data:/pnos/controlcentre/pk-controlcenter
+     - ./downloads:/tmp
+   ```
+   同时移除 `tmpfs` 配置段。
+
+> 容器启动时若检测到 `dry_run: false`，会在日志中输出内存风险警告。
 
 ## 数据目录
 
-挂载的 `./data` 目录对应容器内 `/app/spde-node`，包含：
+宿主机 `./data` 直接映射到容器内 pk 工作目录 `/pnos/controlcentre/pk-controlcenter`，包含：
 
-- `config/config.yaml`：下载任务配置
-- `data/node-id.json`：节点永久唯一标识
-- `data/run-history.jsonl`：每次下载的历史记录（JSON Lines 格式），包含下载字节数、耗时、平均速度、状态等
+- `config.yaml`：PK 主控配置
+- `pk-data/state.json`：节点、任务、调度、运行记录（持久化核心）
+- `pk-data/artifacts/`：各平台 SPDE 二进制，用于下发给外部节点
+
+> SPDE 自身的 `spde-node/` 目录（node-id.json、run-history.jsonl）不持久化，容器重建后节点重新注册。流量统计以 PK 的 state.json 为准。
 
 ## docker-compose.yml
 
+<!-- COMPOSE_START -->
 ```yaml
 services:
   pcdn-keeper:
     image: ghcr.io/pandamelive/pcdn-keeper:latest
     container_name: pcdnkeeper
     restart: always
-    environment:
-      - LOOP_INTERVAL=20
+    ports:
+      - "5566:5566"
     volumes:
-      # spde-node 工作目录（config.yaml、node-id.json、run-history.jsonl 均在此）
-      - ./data:/app/spde-node
+      # pk 工作目录持久化（config.yaml、pk-data/state.json、artifacts/）
+      - ./data:/pnos/controlcentre/pk-controlcenter
+    tmpfs:
+      # 下载目录用容器标准 /tmp，内存文件系统，完全不落盘
+      - /tmp
     logging:
       driver: "json-file"
       options:
         max-size: "5m"
         max-file: "3"
-    tmpfs:
-      - /tmp/downloads
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
 ```
+<!-- COMPOSE_END -->
+
+## 相关项目
+
+- [PK](https://github.com/pandamelive/pk) — PandaNetPL 主控，生成、下发并控制 SPDE 节点
+- [SPDE](https://github.com/pandamelive/spde) — Super-Download-Engine 统一下载中心

@@ -1,7 +1,10 @@
 FROM alpine:latest
 
-ARG SPDE_VERSION=v0.2.1
-ARG SPDE_ARCH=x86_64-linux-musl
+# ========== 仓库配置 ==========
+ARG PK_REPO=pandamelive/pk
+ARG SPDE_REPO=pandamelive/spde
+ARG TARGETARCH=amd64
+# ================================
 
 RUN apk update && apk add --no-cache \
     ca-certificates \
@@ -10,26 +13,29 @@ RUN apk update && apk add --no-cache \
     bash
 
 ENV TZ=Asia/Shanghai
-ENV LOOP_INTERVAL=60
 
-WORKDIR /app
+WORKDIR /pnos
 
-# 下载 spde 静态二进制
-RUN curl -fSL -o /app/spde \
-    "https://github.com/pandamelive/spde/releases/download/${SPDE_VERSION}/spde-${SPDE_ARCH}" \
-    && chmod +x /app/spde
+RUN mkdir -p /pnos/download /pnos/controlcentre
 
-# 复制入口脚本和默认配置
-COPY entrypoint.sh /opt/init/entrypoint.sh
-COPY config.yaml /opt/init/config.yaml
+# 根据架构选择二进制资产名，下载到对应子目录
+RUN if [ "${TARGETARCH}" = "arm64" ]; then \
+        PK_ASSET="pk-aarch64-linux-musl"; \
+        SPDE_ASSET="spde-aarch64-linux-musl"; \
+    else \
+        PK_ASSET="pk-x86_64-linux-musl"; \
+        SPDE_ASSET="spde-x86_64-linux-musl"; \
+    fi; \
+    curl -fSL -o /pnos/controlcentre/pk \
+        "https://github.com/${PK_REPO}/releases/latest/download/${PK_ASSET}" \
+        && chmod +x /pnos/controlcentre/pk; \
+    curl -fSL -o /pnos/download/spde \
+        "https://github.com/${SPDE_REPO}/releases/latest/download/${SPDE_ASSET}" \
+        && chmod +x /pnos/download/spde
 
-RUN chmod +x /opt/init/entrypoint.sh \
-    && mkdir -p /app/spde-node/config /app/spde-node/data /tmp/downloads
+# 入口脚本和默认 pk 配置
+COPY entrypoint.sh /pnos/entrypoint.sh
+COPY pk-config.yaml /pnos/pk-config.default.yaml
+RUN chmod +x /pnos/entrypoint.sh
 
-ENTRYPOINT ["/bin/bash", "-c", "\
-mkdir -p /app/spde-node/config /app/spde-node/data; \
-if [ ! -f /app/spde-node/config/config.yaml ]; then \
-  cp /opt/init/config.yaml /app/spde-node/config/config.yaml; \
-fi; \
-exec /opt/init/entrypoint.sh \
-"]
+ENTRYPOINT ["/bin/bash", "/pnos/entrypoint.sh"]

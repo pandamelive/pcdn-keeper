@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   release:
     types: [published]
+  repository_dispatch:
+    types: [upstream-release]
 
 jobs:
   build:
@@ -37,6 +39,7 @@ jobs:
           context: .
           push: true
           no-cache: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/pcdn-keeper:latest
             ghcr.io/${{ github.repository_owner }}/pcdn-keeper:${{ github.ref_name }}

@@ -1,0 +1,25 @@
+# PK master config - pcdn-keeper minimal combo
+# 持久化路径: /pnos/controlcentre/config.yaml
+# 修改后重启容器生效: docker compose restart
+
+listen: "0.0.0.0:5566"
+data_dir: null
+heartbeat_timeout_secs: 45
+token: ""
+
+# 下发给 spde 节点的默认下载参数
+# pcdn-keeper 场景: resume=false（每次重新下载以持续产生流量）
+# save_path 指向容器内 tmpfs 目录，完全不落盘
+spde_defaults:
+  max_concurrent: 4
+  resume: false
+  retry_times: 3
+  timeout: 1800
+  skip_tls_verify: false
+  connections_per_file: 8
+  # dry_run=true: 数据直接丢弃不落盘，仅统计速度和流量（PCDN 流量模拟推荐，安全）
+  # dry_run=false: 实际写入 save_path（tmpfs 内存，注意大文件占满内存风险）
+  dry_run: true
+  save_path: "/tmp"
+  http_proxy: ""
+  https_proxy: ""
