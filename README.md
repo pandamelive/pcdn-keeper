@@ -164,11 +164,6 @@ services:
       options:
         max-size: "5m"
         max-file: "3"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
 ```
 <!-- COMPOSE_END -->
 
