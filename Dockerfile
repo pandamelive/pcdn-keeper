@@ -4,15 +4,23 @@ FROM alpine:latest
 ARG PK_REPO=pandamelive/pk
 ARG SPDE_REPO=pandamelive/spde
 ARG TARGETARCH=amd64
+# 版本号（由 CI 从上游 latest release 获取，通过 build-arg 传入）
+ARG PK_VERSION=unknown
+ARG SPDE_VERSION=unknown
 # ================================
 
 RUN apk update && apk add --no-cache \
     ca-certificates \
     tzdata \
     curl \
-    bash
+    bash \
+    jq
 
 ENV TZ=Asia/Shanghai
+# 版本号环境变量（entrypoint.sh 会用二进制 --version 覆盖为真实值，这里作为 fallback）
+ENV PK_VERSION=${PK_VERSION}
+ENV SPDE_VERSION=${SPDE_VERSION}
+ENV PCDN_KEEPER_VERSION=pk-v${PK_VERSION}_spde-v${SPDE_VERSION}
 
 WORKDIR /pnos
 
@@ -32,6 +40,12 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
     curl -fSL -o /pnos/download/spde \
         "https://github.com/${SPDE_REPO}/releases/latest/download/${SPDE_ASSET}" \
         && chmod +x /pnos/download/spde
+
+# 镜像元数据
+LABEL org.opencontainers.image.title="pcdn-keeper" \
+      org.opencontainers.image.description="PK + SPDE minimal combo for PCDN traffic simulation" \
+      org.opencontainers.image.version="pk-v${PK_VERSION}_spde-v${SPDE_VERSION}" \
+      org.opencontainers.image.source="https://github.com/pandamelive/pcdn-keeper"
 
 # 入口脚本和默认 pk 配置
 COPY entrypoint.sh /pnos/entrypoint.sh

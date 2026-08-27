@@ -51,6 +51,18 @@ if grep -qE '^\s*dry_run:\s*false' "${PK_WORK_DIR}/config.yaml"; then
     echo "[warn] ===================================================="
 fi
 
+# ========== 版本号检测 ==========
+# 从二进制 --version 输出提取真实版本号（格式: "pk 0.4.5" / "spde 0.3.2"）
+PK_VERSION="$("${PK_BIN}" --version 2>/dev/null | awk '{print $NF}' | tr -d '[:space:]')"
+SPDE_VERSION="$("${SPDE_BIN}" --version 2>/dev/null | awk '{print $NF}' | tr -d '[:space:]')"
+if [ -n "${PK_VERSION}" ] && [ -n "${SPDE_VERSION}" ]; then
+    PCDN_KEEPER_VERSION="pk-v${PK_VERSION}_spde-v${SPDE_VERSION}"
+    export SPDE_VERSION PCDN_KEEPER_VERSION
+    echo "[init] 版本标识: ${PCDN_KEEPER_VERSION}"
+else
+    echo "[warn] 无法获取 pk/spde 版本号，UI 版本标识将仅显示 pk 版本"
+fi
+
 # ========== 进程管理 ==========
 PK_PID=""
 SPDE_PID=""
