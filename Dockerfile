@@ -27,6 +27,7 @@ WORKDIR /pnos
 RUN mkdir -p /pnos/download /pnos/controlcentre
 
 # 根据架构选择二进制资产名，下载到对应子目录
+# 用指定版本号下载，确保与 CI 获取的版本一致（不依赖 latest 语义）
 RUN if [ "${TARGETARCH}" = "arm64" ]; then \
         PK_ASSET="pk-aarch64-linux-musl"; \
         SPDE_ASSET="spde-aarch64-linux-musl"; \
@@ -35,10 +36,10 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
         SPDE_ASSET="spde-x86_64-linux-musl"; \
     fi; \
     curl -fSL -o /pnos/controlcentre/pk \
-        "https://github.com/${PK_REPO}/releases/latest/download/${PK_ASSET}" \
+        "https://github.com/${PK_REPO}/releases/download/v${PK_VERSION}/${PK_ASSET}" \
         && chmod +x /pnos/controlcentre/pk; \
     curl -fSL -o /pnos/download/spde \
-        "https://github.com/${SPDE_REPO}/releases/latest/download/${SPDE_ASSET}" \
+        "https://github.com/${SPDE_REPO}/releases/download/v${SPDE_VERSION}/${SPDE_ASSET}" \
         && chmod +x /pnos/download/spde
 
 # 镜像元数据
