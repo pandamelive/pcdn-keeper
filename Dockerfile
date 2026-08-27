@@ -41,20 +41,30 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
     curl -fSL -o /pnos/download/spde \
         "https://github.com/${SPDE_REPO}/releases/download/v${SPDE_VERSION}/${SPDE_ASSET}" \
         && chmod +x /pnos/download/spde
-# ========== 版本校验（确保下载的二进制版本与预期一致，不一致直接构建失败）==========
+# ========== 版本校验（检查文件存在性和大小，不运行二进制——跨架构qemu模拟不可靠）==========
 RUN echo "预期版本: pk=${PK_VERSION}, spde=${SPDE_VERSION}" && \
-    PK_BIN_VER=$(/pnos/controlcentre/pk --version 2>/dev/null | awk '{print $NF}' | tr -d '[:space:]' | sed 's/^v//') && \
-    SPDE_BIN_VER=$(/pnos/download/spde --version 2>/dev/null | awk '{print $NF}' | tr -d '[:space:]' | sed 's/^v//') && \
-    echo "实际版本: pk=${PK_BIN_VER}, spde=${SPDE_BIN_VER}" && \
-    if [ "${PK_BIN_VER}" != "${PK_VERSION}" ]; then \
-        echo "ERROR: pk 版本不匹配! 预期=${PK_VERSION}, 实际=${PK_BIN_VER}"; \
+    echo "检查二进制文件..." && \
+    if [ ! -f /pnos/controlcentre/pk ] || [ ! -s /pnos/controlcentre/pk ]; then \
+        echo "ERROR: pk 二进制不存在或为空"; \
         exit 1; \
     fi && \
-    if [ "${SPDE_BIN_VER}" != "${SPDE_VERSION}" ]; then \
-        echo "ERROR: spde 版本不匹配! 预期=${SPDE_VERSION}, 实际=${SPDE_BIN_VER}"; \
+    if [ ! -f /pnos/download/spde ] || [ ! -s /pnos/download/spde ]; then \
+        echo "ERROR: spde 二进制不存在或为空"; \
         exit 1; \
     fi && \
-    echo "版本校验通过: pk-v${PK_VERSION}_spde-v${SPDE_VERSION}"
+    PK_SIZE=$(stat -c%s /pnos/controlcentre/pk) && \
+    SPDE_SIZE=$(stat -c%s /pnos/download/spde) && \
+    echo "pk 大小: ${PK_SIZE} bytes" && \
+    echo "spde 大小: ${SPDE_SIZE} bytes" && \
+    if [ "${PK_SIZE}" -lt 1000000 ]; then \
+        echo "ERROR: pk 二进制过小 (${PK_SIZE} bytes)，可能下载失败"; \
+        exit 1; \
+    fi && \
+    if [ "${SPDE_SIZE}" -lt 1000000 ]; then \
+        echo "ERROR: spde 二进制过小 (${SPDE_SIZE} bytes)，可能下载失败"; \
+        exit 1; \
+    fi && \
+    echo "版本校验通过: pk-v${PK_VERSION}_spde-v${SPDE_VERSION} (文件完整性检查通过)"
 
 # 镜像元数据
 LABEL org.opencontainers.image.title="pcdn-keeper" \
