@@ -80,14 +80,40 @@ start_pk() {
     echo "[supervisor] pk pid=${PK_PID}"
 }
 
+# spde 数据目录持久化（node-id.json、运行历史等）
+# 链接到 pk 的持久化目录下，确保容器重建后 node_id 不变
+SPDE_DATA_DIR="/pnos/download/data"
+SPDE_DATA_PERSIST="${PK_WORK_DIR}/spde-data"
+
+ensure_spde_data_persist() {
+    mkdir -p "${SPDE_DATA_PERSIST}"
+    # 如果 data 目录不存在或不是符号链接，创建符号链接
+    if [ ! -L "${SPDE_DATA_DIR}" ]; then
+        # 如果已存在普通目录，先备份内容
+        if [ -d "${SPDE_DATA_DIR}" ] && [ ! -L "${SPDE_DATA_DIR}" ]; then
+            echo "[init] 迁移 spde data 目录到持久化位置..."
+            cp -rn "${SPDE_DATA_DIR}/." "${SPDE_DATA_PERSIST}/" 2>/dev/null || true
+            rm -rf "${SPDE_DATA_DIR}"
+        fi
+        mkdir -p "$(dirname "${SPDE_DATA_DIR}")"
+        ln -sf "${SPDE_DATA_PERSIST}" "${SPDE_DATA_DIR}"
+        echo "[init] spde data 目录已持久化: ${SPDE_DATA_DIR} -> ${SPDE_DATA_PERSIST}"
+    fi
+}
+
 start_spde() {
     echo "[supervisor] 启动 spde agent..."
+    # 确保 spde 数据目录持久化（node-id 不变）
+    ensure_spde_data_persist
     local args="agent --master ${SPDE_MASTER}"
     if [ -n "${PK_TOKEN}" ]; then
         args="${args} --token ${PK_TOKEN}"
     fi
+    # cd 到 spde 工作目录，确保 data 目录在正确位置
+    cd /pnos/download
     "${SPDE_BIN}" ${args} &
     SPDE_PID=$!
+    cd /  # 切回根目录，避免影响其他操作
     echo "[supervisor] spde pid=${SPDE_PID}"
 }
 
