@@ -33,8 +33,38 @@ jobs:
             fi
             echo "${ver}"
           }
+
+          # 默认从 API 获取最新版本
           PK_VER=$(get_latest_version "pandamelive/pk")
           SPDE_VER=$(get_latest_version "pandamelive/spde")
+
+          # 如果是 repository_dispatch 触发，且 client_payload 包含版本号，优先使用（避免竞态：一个上游发了另一个还没发）
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            UPSTREAM="${{ github.event.client_payload.upstream }}"
+            DISPATCH_VERSION="${{ github.event.client_payload.version }}"
+            # 去除版本号前导 v
+            DISPATCH_VERSION=$(echo "${DISPATCH_VERSION}" | sed 's/^v//')
+            if [ -n "${DISPATCH_VERSION}" ] && [ "${DISPATCH_VERSION}" != "null" ]; then
+              if [ "${UPSTREAM}" = "pk" ]; then
+                PK_VER="${DISPATCH_VERSION}"
+                echo "使用 repository_dispatch 传入的 pk 版本: ${PK_VER}"
+              elif [ "${UPSTREAM}" = "spde" ]; then
+                SPDE_VER="${DISPATCH_VERSION}"
+                echo "使用 repository_dispatch 传入的 spde 版本: ${SPDE_VER}"
+              fi
+            fi
+          fi
+
+          # 版本号校验：不能是 unknown 或空
+          if [ -z "${PK_VER}" ] || [ "${PK_VER}" = "unknown" ]; then
+            echo "ERROR: pk 版本号无效: ${PK_VER}"
+            exit 1
+          fi
+          if [ -z "${SPDE_VER}" ] || [ "${SPDE_VER}" = "unknown" ]; then
+            echo "ERROR: spde 版本号无效: ${SPDE_VER}"
+            exit 1
+          fi
+
           echo "pk_version=${PK_VER}" >> $GITHUB_OUTPUT
           echo "spde_version=${SPDE_VER}" >> $GITHUB_OUTPUT
           echo "combo_tag=pk-v${PK_VER}_spde-v${SPDE_VER}" >> $GITHUB_OUTPUT
