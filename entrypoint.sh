@@ -53,17 +53,22 @@ fi
 
 # ========== 版本号检测 ==========
 # 从二进制 --version 输出提取真实版本号
-# 兼容多种输出格式: "pk 0.4.5" / "pk v0.4.5" / "pk version 0.4.5" / "0.4.5"
+# clap 输出格式: "pk 1.0" / "spde 1.0"
+# 注意：alpine 使用 busybox 工具链，head/tail 必须用 -n 参数，不支持 head -1 简写
 extract_version() {
     local bin=$1
     local output
-    output=$("$bin" --version 2>&1 | tr -d '[:space:]')
-    # 优先匹配语义化版本号（可选 v 前缀）
+    output=$("$bin" --version 2>&1)
+    echo "[debug] $bin --version raw output: \"$output\""
+    # 取最后一个空白分隔的字段（clap 输出 "pk 1.0" → 最后字段 "1.0"）
     local ver
-    ver=$(echo "$output" | grep -oE 'v?[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 | sed 's/^v//')
-    if [ -z "$ver" ]; then
-        # 兜底：取最后一个空白分隔的字段
-        ver=$(echo "$output" | awk '{print $NF}')
+    ver=$(echo "$output" | awk '{print $NF}' | tr -d 'vV' | tr -d '[:space:]')
+    echo "[debug] $bin awk-extracted: \"$ver\""
+    # 校验：必须是数字开头的版本号，否则用 sed 正则兜底
+    if ! echo "$ver" | grep -qE '^[0-9]+\.[0-9]+'; then
+        echo "[debug] $bin awk 提取无效，使用 sed 正则兜底"
+        ver=$(echo "$output" | sed -n 's/.*\([0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\).*/\1/p' | head -n 1 | tr -d '[:space:]')
+        echo "[debug] $bin sed-extracted: \"$ver\""
     fi
     echo "$ver"
 }
@@ -71,12 +76,15 @@ extract_version() {
 # 保存构建时传入的版本号作为 fallback
 BUILD_PK_VERSION="${PK_VERSION:-unknown}"
 BUILD_SPDE_VERSION="${SPDE_VERSION:-unknown}"
+echo "[init] 构建时版本号: pk=${BUILD_PK_VERSION}, spde=${BUILD_SPDE_VERSION}"
 
 # 从二进制获取真实版本号（set +e 防止 --version 返回非零导致脚本退出）
 set +e
 RUNTIME_PK_VERSION=$(extract_version "${PK_BIN}")
 RUNTIME_SPDE_VERSION=$(extract_version "${SPDE_BIN}")
 set -e
+
+echo "[init] 运行时提取版本号: pk=${RUNTIME_PK_VERSION}, spde=${RUNTIME_SPDE_VERSION}"
 
 # 使用运行时版本号（如果获取成功），否则回退到构建时版本号
 PK_VERSION="${RUNTIME_PK_VERSION:-${BUILD_PK_VERSION}}"
@@ -92,6 +100,7 @@ else
     PK_VERSION="${BUILD_PK_VERSION}"
     SPDE_VERSION="${BUILD_SPDE_VERSION}"
     export PK_VERSION SPDE_VERSION PCDN_KEEPER_VERSION
+    echo "[init] fallback 版本标识: ${PCDN_KEEPER_VERSION}"
 fi
 
 # ========== 进程管理 ==========
