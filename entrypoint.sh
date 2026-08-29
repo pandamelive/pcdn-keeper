@@ -52,15 +52,46 @@ if grep -qE '^\s*dry_run:\s*false' "${PK_WORK_DIR}/config.yaml"; then
 fi
 
 # ========== 版本号检测 ==========
-# 从二进制 --version 输出提取真实版本号（格式: "pk 0.4.5" / "spde 0.3.2"）
-PK_VERSION="$("${PK_BIN}" --version 2>/dev/null | awk '{print $NF}' | tr -d '[:space:]')"
-SPDE_VERSION="$("${SPDE_BIN}" --version 2>/dev/null | awk '{print $NF}' | tr -d '[:space:]')"
-if [ -n "${PK_VERSION}" ] && [ -n "${SPDE_VERSION}" ]; then
+# 从二进制 --version 输出提取真实版本号
+# 兼容多种输出格式: "pk 0.4.5" / "pk v0.4.5" / "pk version 0.4.5" / "0.4.5"
+extract_version() {
+    local bin=$1
+    local output
+    output=$("$bin" --version 2>&1 | tr -d '[:space:]')
+    # 优先匹配语义化版本号（可选 v 前缀）
+    local ver
+    ver=$(echo "$output" | grep -oE 'v?[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 | sed 's/^v//')
+    if [ -z "$ver" ]; then
+        # 兜底：取最后一个空白分隔的字段
+        ver=$(echo "$output" | awk '{print $NF}')
+    fi
+    echo "$ver"
+}
+
+# 保存构建时传入的版本号作为 fallback
+BUILD_PK_VERSION="${PK_VERSION:-unknown}"
+BUILD_SPDE_VERSION="${SPDE_VERSION:-unknown}"
+
+# 从二进制获取真实版本号（set +e 防止 --version 返回非零导致脚本退出）
+set +e
+RUNTIME_PK_VERSION=$(extract_version "${PK_BIN}")
+RUNTIME_SPDE_VERSION=$(extract_version "${SPDE_BIN}")
+set -e
+
+# 使用运行时版本号（如果获取成功），否则回退到构建时版本号
+PK_VERSION="${RUNTIME_PK_VERSION:-${BUILD_PK_VERSION}}"
+SPDE_VERSION="${RUNTIME_SPDE_VERSION:-${BUILD_SPDE_VERSION}}"
+
+if [ -n "${PK_VERSION}" ] && [ -n "${SPDE_VERSION}" ] && [ "${PK_VERSION}" != "unknown" ] && [ "${SPDE_VERSION}" != "unknown" ]; then
     PCDN_KEEPER_VERSION="pk-v${PK_VERSION}_spde-v${SPDE_VERSION}"
-    export SPDE_VERSION PCDN_KEEPER_VERSION
+    export PK_VERSION SPDE_VERSION PCDN_KEEPER_VERSION
     echo "[init] 版本标识: ${PCDN_KEEPER_VERSION}"
 else
-    echo "[warn] 无法获取 pk/spde 版本号，UI 版本标识将仅显示 pk 版本"
+    echo "[warn] 无法获取 pk/spde 真实版本号（pk=${PK_VERSION}, spde=${SPDE_VERSION}），使用构建时 fallback"
+    PCDN_KEEPER_VERSION="pk-v${BUILD_PK_VERSION}_spde-v${BUILD_SPDE_VERSION}"
+    PK_VERSION="${BUILD_PK_VERSION}"
+    SPDE_VERSION="${BUILD_SPDE_VERSION}"
+    export PK_VERSION SPDE_VERSION PCDN_KEEPER_VERSION
 fi
 
 # ========== 进程管理 ==========
