@@ -19,109 +19,53 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Get upstream versions (from asset filenames)
+      - name: Get upstream versions
         id: versions
         run: |
-          # 从最新 release 的 assets 文件名直接提取版本号（如 pk-v1.0-x86_64-linux-musl -> 1.0）
+          # 直接从最新 release 的 tag_name 获取版本号（按创建时间倒序取第一个）
           # 不依赖 /releases/latest 端点（该端点对 spde 返回了错误的旧版本 v0.2.0）
-          # 兼容旧格式 release（文件名不带版本号），回退到从 tag_name 获取
+          # 调试信息走 stderr，避免污染命令替换的返回值
           get_latest_version() {
             local repo=$1
-            local prefix=$2  # pk- 或 spde-
-            local release_data
-            release_data=$(curl -sf --retry 3 --retry-delay 2 \
+            local ver
+            ver=$(curl -sf --retry 3 --retry-delay 2 \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${repo}/releases?per_page=1") || {
-                echo "ERROR: 无法获取 ${repo} 的 release 数据"
+              "https://api.github.com/repos/${repo}/releases?per_page=1" | \
+              jq -r '.[0].tag_name' | sed 's/^v//') || {
+                echo "ERROR: 无法获取 ${repo} 的 release 数据" >&2
                 exit 1
             }
-
-            # 优先从带版本号的文件名提取: pk-v1.0-x86_64-linux-musl -> 1.0
-            local ver
-            ver=$(echo "$release_data" | \
-              jq -r ".[0].assets[].name" | \
-              grep -E "^${prefix}v[0-9]+\.[0-9]+" | \
-              head -n 1 | \
-              sed "s/^${prefix}v//" | \
-              sed 's/-.*//')
-
-            if [ -n "${ver}" ] && [ "${ver}" != "null" ]; then
-              echo "从文件名提取版本号: ${ver}"
-            else
-              # 回退：从 tag_name 获取（兼容旧格式 release）
-              ver=$(echo "$release_data" | jq -r '.[0].tag_name' | sed 's/^v//')
-              echo "从 tag_name 获取版本号(兼容旧格式): ${ver}"
-            fi
-
             if [ -z "${ver}" ] || [ "${ver}" = "null" ]; then
-              echo "ERROR: 无法获取 ${repo} 的最新版本"
+              echo "ERROR: ${repo} 版本号无效: ${ver}" >&2
               exit 1
             fi
             echo "${ver}"
           }
 
-          # 检测 release 中是否有带版本号的文件名，返回实际下载用的 asset 名
-          # 兼容新旧格式：新格式 pk-v1.0-x86_64-linux-musl，旧格式 pk-x86_64-linux-musl
-          get_asset_name() {
-            local repo=$1
-            local prefix=$2
-            local version=$3
-            local platform=$4
-            local new_name="${prefix}v${version}-${platform}"
-            local exists
-            # grep -c 无匹配时返回退出码1，加 || echo 0 防止 set -e 导致脚本退出
-            exists=$(curl -sf --retry 3 --retry-delay 2 \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${repo}/releases?per_page=1" | \
-              jq -r ".[0].assets[].name" | grep -c "^${new_name}$" || echo 0)
-            if [ "$exists" -gt 0 ]; then
-              echo "$new_name"
-            else
-              echo "${prefix}${platform}"
-            fi
-          }
+          # 默认从 API 获取最新版本
+          PK_VER=$(get_latest_version "pandamelive/pk")
+          SPDE_VER=$(get_latest_version "pandamelive/spde")
 
-          # 默认从文件名/API 获取最新版本
-          PK_VER=$(get_latest_version "pandamelive/pk" "pk-")
-          SPDE_VER=$(get_latest_version "pandamelive/spde" "spde-")
-
-          # 如果是 repository_dispatch 触发，且 client_payload 包含版本号，优先使用（避免竞态：一个上游发了另一个还没发）
+          # repository_dispatch 触发时优先使用传入的版本号（避免竞态：一个上游发了另一个还没发）
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             UPSTREAM="${{ github.event.client_payload.upstream }}"
-            DISPATCH_VERSION="${{ github.event.client_payload.version }}"
-            DISPATCH_VERSION=$(echo "${DISPATCH_VERSION}" | sed 's/^v//')
+            DISPATCH_VERSION=$(echo "${{ github.event.client_payload.version }}" | sed 's/^v//')
             if [ -n "${DISPATCH_VERSION}" ] && [ "${DISPATCH_VERSION}" != "null" ]; then
               if [ "${UPSTREAM}" = "pk" ]; then
                 PK_VER="${DISPATCH_VERSION}"
-                echo "使用 repository_dispatch 传入的 pk 版本: ${PK_VER}"
+                echo "使用 dispatch 传入的 pk 版本: ${PK_VER}" >&2
               elif [ "${UPSTREAM}" = "spde" ]; then
                 SPDE_VER="${DISPATCH_VERSION}"
-                echo "使用 repository_dispatch 传入的 spde 版本: ${SPDE_VER}"
+                echo "使用 dispatch 传入的 spde 版本: ${SPDE_VER}" >&2
               fi
             fi
           fi
 
-          # 获取实际下载用的 asset 文件名（兼容新旧格式）
-          PK_ASSET_NAME=$(get_asset_name "pandamelive/pk" "pk-" "${PK_VER}" "x86_64-linux-musl")
-          SPDE_ASSET_NAME=$(get_asset_name "pandamelive/spde" "spde-" "${SPDE_VER}" "x86_64-linux-musl")
-
-          # 版本号校验
-          if [ -z "${PK_VER}" ] || [ "${PK_VER}" = "unknown" ]; then
-            echo "ERROR: pk 版本号无效: ${PK_VER}"
-            exit 1
-          fi
-          if [ -z "${SPDE_VER}" ] || [ "${SPDE_VER}" = "unknown" ]; then
-            echo "ERROR: spde 版本号无效: ${SPDE_VER}"
-            exit 1
-          fi
-
           echo "pk_version=${PK_VER}" >> $GITHUB_OUTPUT
           echo "spde_version=${SPDE_VER}" >> $GITHUB_OUTPUT
-          echo "pk_asset=${PK_ASSET_NAME}" >> $GITHUB_OUTPUT
-          echo "spde_asset=${SPDE_ASSET_NAME}" >> $GITHUB_OUTPUT
           echo "combo_tag=pk-v${PK_VER}_spde-v${SPDE_VER}" >> $GITHUB_OUTPUT
-          echo "PK version: ${PK_VER} (asset: ${PK_ASSET_NAME})"
-          echo "SPDE version: ${SPDE_VER} (asset: ${SPDE_ASSET_NAME})"
+          echo "PK version: ${PK_VER}"
+          echo "SPDE version: ${SPDE_VER}"
           echo "Combo tag: pk-v${PK_VER}_spde-v${SPDE_VER}"
 
       - name: Setup Docker Buildx
@@ -159,8 +103,6 @@ jobs:
           build-args: |
             PK_VERSION=${{ steps.versions.outputs.pk_version }}
             SPDE_VERSION=${{ steps.versions.outputs.spde_version }}
-            PK_ASSET=${{ steps.versions.outputs.pk_asset }}
-            SPDE_ASSET=${{ steps.versions.outputs.spde_asset }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/pcdn-keeper:latest
             ghcr.io/${{ github.repository_owner }}/pcdn-keeper:${{ steps.versions.outputs.combo_tag }}
