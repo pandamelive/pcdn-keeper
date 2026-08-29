@@ -24,6 +24,8 @@ jobs:
 
       - name: Get upstream versions
         id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # 用 gh release view 获取 latest release 的 tag_name（自动去掉 v 前缀）
           # 调试信息走 stderr，避免污染命令替换的返回值
