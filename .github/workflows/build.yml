@@ -4,14 +4,17 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  release:
-    types: [published]
   repository_dispatch:
     types: [upstream-release]
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -22,17 +25,14 @@ jobs:
       - name: Get upstream versions
         id: versions
         run: |
-          # 从 /releases/latest 获取最新正式版的 tag_name
+          # 用 gh release view 获取 latest release 的 tag_name（自动去掉 v 前缀）
           # 调试信息走 stderr，避免污染命令替换的返回值
           get_latest_version() {
             local repo=$1
             local ver
-            ver=$(curl -sf --retry 3 --retry-delay 2 \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${repo}/releases/latest" | \
-              jq -r '.tag_name' | sed 's/^v//') || {
-                echo "ERROR: 无法获取 ${repo} 的 latest release" >&2
-                exit 1
+            ver=$(gh release view --repo "${repo}" --json tagName --jq '.tagName | ltrimstr("v")') || {
+              echo "ERROR: 无法获取 ${repo} 的 latest release" >&2
+              exit 1
             }
             if [ -z "${ver}" ] || [ "${ver}" = "null" ]; then
               echo "ERROR: ${repo} 版本号无效: ${ver}" >&2
@@ -96,7 +96,6 @@ jobs:
         with:
           context: .
           push: true
-          no-cache: true
           provenance: false
           platforms: linux/amd64,linux/arm64
           build-args: |
@@ -105,7 +104,10 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/pcdn-keeper:latest
             ghcr.io/${{ github.repository_owner }}/pcdn-keeper:${{ steps.versions.outputs.combo_tag }}
+            ghcr.io/${{ github.repository_owner }}/pcdn-keeper:sha-${{ github.sha }}
             docker.io/${{ secrets.DOCKERHUB_USERNAME }}/pcdn-keeper:latest
             docker.io/${{ secrets.DOCKERHUB_USERNAME }}/pcdn-keeper:${{ steps.versions.outputs.combo_tag }}
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/pcdn-keeper:sha-${{ github.sha }}
             ${{ secrets.ALIYUN_ACR_REGISTRY }}/${{ secrets.ALIYUN_ACR_NAMESPACE }}/pcdn-keeper:latest
             ${{ secrets.ALIYUN_ACR_REGISTRY }}/${{ secrets.ALIYUN_ACR_NAMESPACE }}/pcdn-keeper:${{ steps.versions.outputs.combo_tag }}
+            ${{ secrets.ALIYUN_ACR_REGISTRY }}/${{ secrets.ALIYUN_ACR_NAMESPACE }}/pcdn-keeper:sha-${{ github.sha }}
