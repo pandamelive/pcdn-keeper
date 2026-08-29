@@ -36,7 +36,7 @@ pcdn-keeper 容器
 - PK Web UI 可视化管理节点、创建下载任务、查看流量统计
 - SPDE Agent 自动接入本地 PK，零配置节点注册
 - 全部网络数据写入内存（tmpfs），无磁盘 IO
-- 仅 PK 工作目录（pk-controlcenter）持久化，节点数据随容器重建
+- PK 工作目录（pk-controlcenter）持久化，SPDE 节点数据（node-id、运行历史）同步持久化，容器重建后节点身份不变
 - docker compose 一键部署
 
 ## 快速使用
@@ -140,7 +140,7 @@ spde_defaults:
 - `pk-data/state.json`：节点、任务、调度、运行记录（持久化核心）
 - `pk-data/artifacts/`：各平台 SPDE 二进制，用于下发给外部节点
 
-> SPDE 自身的 `spde-node/` 目录（node-id.json、run-history.jsonl）不持久化，容器重建后节点重新注册。流量统计以 PK 的 state.json 为准。
+> SPDE 自身的 `spde-node/` 目录（node-id.json、run-history.jsonl）由 entrypoint.sh 软链接到 PK 工作目录下持久化（`pk-controlcenter/spde-data/`），容器重建后节点身份与运行历史保持不变。流量统计以 PK 的 state.json 为准。
 
 ## docker-compose.yml
 
@@ -167,7 +167,15 @@ services:
 ```
 <!-- COMPOSE_END -->
 
+## 生态标准
+
+本仓库所属 **PandaNetOS 生态项目群**统一遵循全系统权威标准仓库 [PandaNetOS](https://github.com/pandamelive/PandaNetOS) 的规范：
+
+- **共享标准库**：所有生态项目（PK、SPDE、PandaNetOS 等）强制依赖 `pandanetos` 共享库（crate 路径依赖/发布依赖），统一数据结构、协议路径常量、错误码、响应格式与配置标准，禁止各自维护私有协议与常量。
+- **标准一致性**：API 路径、响应格式（`ApiResponse`/`ApiError`）、文件布局与文档规范均以 PandaNetOS 仓库《标准规范》为准，生态项目不得出现与标准不一致的私有定义。
+
 ## 相关项目
 
-- [PK](https://github.com/pandamelive/pk) — PandaNetPL 主控，生成、下发并控制 SPDE 节点
-- [SPDE](https://github.com/pandamelive/spde) — Super-Download-Engine 统一下载中心
+- [PandaNetOS](https://github.com/pandamelive/PandaNetOS) — 全系统权威标准仓库（共享库 + 标准规范源码）
+- [PK](https://github.com/pandamelive/pk) — PandaNetPL 主控，基于 `pandanetos` 共享库构建，生成、下发并控制 SPDE 节点
+- [SPDE](https://github.com/pandamelive/spde) — Super-Download-Engine 统一下载中心，基于 `pandanetos` 共享库构建
