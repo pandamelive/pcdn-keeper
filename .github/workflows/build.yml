@@ -29,7 +29,12 @@ jobs:
             local repo=$1
             local prefix=$2  # pk- 或 spde-
             local release_data
-            release_data=$(curl -sf "https://api.github.com/repos/${repo}/releases?per_page=1")
+            release_data=$(curl -sf --retry 3 --retry-delay 2 \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${repo}/releases?per_page=1") || {
+                echo "ERROR: 无法获取 ${repo} 的 release 数据"
+                exit 1
+            }
 
             # 优先从带版本号的文件名提取: pk-v1.0-x86_64-linux-musl -> 1.0
             local ver
@@ -64,8 +69,11 @@ jobs:
             local platform=$4
             local new_name="${prefix}v${version}-${platform}"
             local exists
-            exists=$(curl -sf "https://api.github.com/repos/${repo}/releases?per_page=1" | \
-              jq -r ".[0].assets[].name" | grep -c "^${new_name}$")
+            # grep -c 无匹配时返回退出码1，加 || echo 0 防止 set -e 导致脚本退出
+            exists=$(curl -sf --retry 3 --retry-delay 2 \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${repo}/releases?per_page=1" | \
+              jq -r ".[0].assets[].name" | grep -c "^${new_name}$" || echo 0)
             if [ "$exists" -gt 0 ]; then
               echo "$new_name"
             else
