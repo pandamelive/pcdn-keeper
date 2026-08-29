@@ -4,9 +4,12 @@ FROM alpine:latest
 ARG PK_REPO=pandamelive/pk
 ARG SPDE_REPO=pandamelive/spde
 ARG TARGETARCH=amd64
-# 版本号（由 CI 从上游 latest release 获取，通过 build-arg 传入）
+# 版本号（由 CI 从上游 release assets 文件名提取，通过 build-arg 传入）
 ARG PK_VERSION=unknown
 ARG SPDE_VERSION=unknown
+# CI 检测到的实际 asset 文件名（x86_64），用于日志和元数据
+ARG PK_ASSET=pk-x86_64-linux-musl
+ARG SPDE_ASSET=spde-x86_64-linux-musl
 # ================================
 
 RUN apk update && apk add --no-cache \
@@ -26,23 +29,34 @@ WORKDIR /pnos
 
 RUN mkdir -p /pnos/download /pnos/controlcentre
 
-# 根据架构选择二进制资产名，下载到对应子目录
-# 用指定版本号下载，确保与 CI 获取的版本一致（不依赖 latest 语义）
+# 根据架构选择平台名，下载二进制
+# 优先尝试带版本号的文件名（新格式 pk-v1.0-x86_64-linux-musl）
+# 失败则回退到旧格式（pk-x86_64-linux-musl），兼容历史 release
 RUN if [ "${TARGETARCH}" = "arm64" ]; then \
-        PK_ASSET="pk-aarch64-linux-musl"; \
-        SPDE_ASSET="spde-aarch64-linux-musl"; \
+        PK_PLATFORM="aarch64-linux-musl"; \
+        SPDE_PLATFORM="aarch64-linux-musl"; \
     else \
-        PK_ASSET="pk-x86_64-linux-musl"; \
-        SPDE_ASSET="spde-x86_64-linux-musl"; \
+        PK_PLATFORM="x86_64-linux-musl"; \
+        SPDE_PLATFORM="x86_64-linux-musl"; \
     fi; \
-    curl -fSL -o /pnos/controlcentre/pk \
-        "https://github.com/${PK_REPO}/releases/download/v${PK_VERSION}/${PK_ASSET}" \
-        && chmod +x /pnos/controlcentre/pk; \
-    curl -fSL -o /pnos/download/spde \
-        "https://github.com/${SPDE_REPO}/releases/download/v${SPDE_VERSION}/${SPDE_ASSET}" \
-        && chmod +x /pnos/download/spde
+    echo "下载 pk (platform=${PK_PLATFORM}, version=${PK_VERSION})"; \
+    if ! curl -fSL -o /pnos/controlcentre/pk \
+        "https://github.com/${PK_REPO}/releases/download/v${PK_VERSION}/pk-v${PK_VERSION}-${PK_PLATFORM}"; then \
+        echo "新格式文件名不存在，回退到旧格式 pk-${PK_PLATFORM}"; \
+        curl -fSL -o /pnos/controlcentre/pk \
+        "https://github.com/${PK_REPO}/releases/download/v${PK_VERSION}/pk-${PK_PLATFORM}"; \
+    fi && chmod +x /pnos/controlcentre/pk; \
+    echo "下载 spde (platform=${SPDE_PLATFORM}, version=${SPDE_VERSION})"; \
+    if ! curl -fSL -o /pnos/download/spde \
+        "https://github.com/${SPDE_REPO}/releases/download/v${SPDE_VERSION}/spde-v${SPDE_VERSION}-${SPDE_PLATFORM}"; then \
+        echo "新格式文件名不存在，回退到旧格式 spde-${SPDE_PLATFORM}"; \
+        curl -fSL -o /pnos/download/spde \
+        "https://github.com/${SPDE_REPO}/releases/download/v${SPDE_VERSION}/spde-${SPDE_PLATFORM}"; \
+    fi && chmod +x /pnos/download/spde
+
 # ========== 版本校验（检查文件存在性和大小，不运行二进制——跨架构qemu模拟不可靠）==========
 RUN echo "预期版本: pk=${PK_VERSION}, spde=${SPDE_VERSION}" && \
+    echo "CI 检测 asset: pk=${PK_ASSET}, spde=${SPDE_ASSET}" && \
     echo "检查二进制文件..." && \
     if [ ! -f /pnos/controlcentre/pk ] || [ ! -s /pnos/controlcentre/pk ]; then \
         echo "ERROR: pk 二进制不存在或为空"; \
