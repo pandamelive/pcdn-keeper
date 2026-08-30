@@ -169,13 +169,41 @@ services:
 
 ## 生态标准
 
-本仓库所属 **PandaNetOS 生态项目群**统一遵循全系统权威标准仓库 [PandaNetOS](https://github.com/pandamelive/PandaNetOS) 的规范：
+本项目隶属 **PandaNetOS 生态项目群**，遵循全系统权威标准仓库 [PandaNetOS](https://github.com/PandaNetOS/PandaNetOS) 的规范。
 
-- **共享标准库**：所有生态项目（PK、SPDE、PandaNetOS 等）强制依赖 `pandanetos` 共享库（crate 路径依赖/发布依赖），统一数据结构、协议路径常量、错误码、响应格式与配置标准，禁止各自维护私有协议与常量。
-- **标准一致性**：API 路径、响应格式（`ApiResponse`/`ApiError`）、文件布局与文档规范均以 PandaNetOS 仓库《标准规范》为准，生态项目不得出现与标准不一致的私有定义。
+### 标准库路径约定
+
+本项目封装 PK + SPDE 二进制，开发 PK/SPDE 时强制依赖 `pandanetos` 共享标准库，使用 **path 依赖**，目录布局固定：
+
+```
+<workspace>/
+├── PandaNetOS/              # 标准库仓库（必须与各项目同级）
+│   └── crates/pandanetos/
+├── pk/                      # 主控台
+├── spde/                    # 下载节点
+└── pcdn-keeper/             # 本仓库（Docker 封装）
+```
+
+PK/SPDE 项目 `Cargo.toml` 中统一写：
+
+```toml
+[dependencies]
+pandanetos = { path = "../PandaNetOS/crates/pandanetos" }
+```
+
+> 克隆 PK/SPDE 后需同时克隆 `PandaNetOS/PandaNetOS` 到同级目录，否则 `cargo build` 失败。
+
+### 规范要求
+
+- **共享标准库**：所有生态项目强制依赖 `pandanetos` 共享库，统一数据结构、协议路径常量、错误码、响应格式与配置标准，禁止各自维护私有协议与常量。
+- **标准一致性**：API 路径、响应格式（`ApiResponse`/`ApiError`）、文件布局与文档规范均以 PandaNetOS 仓库《标准规范》为准。
 
 ## 相关项目
 
-- [PandaNetOS](https://github.com/pandamelive/PandaNetOS) — 全系统权威标准仓库（共享库 + 标准规范源码）
+- [PandaNetOS](https://github.com/PandaNetOS/PandaNetOS) — 全系统权威标准仓库（共享库 + 标准规范源码）
 - [PK](https://github.com/pandamelive/pk) — PandaNetPL 主控，基于 `pandanetos` 共享库构建，生成、下发并控制 SPDE 节点
 - [SPDE](https://github.com/pandamelive/spde) — Super-Download-Engine 统一下载中心，基于 `pandanetos` 共享库构建
+
+## License
+
+MIT
