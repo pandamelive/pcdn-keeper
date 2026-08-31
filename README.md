@@ -207,3 +207,43 @@ pandanetos = { path = "../PandaNetOS/crates/pandanetos" }
 ## License
 
 MIT
+
+
+## 开发指南
+
+### 构建镜像
+
+```bash
+docker build -t pcdn-keeper:latest .
+```
+
+### 本地测试
+
+```bash
+docker compose up -d
+docker logs -f pcdnkeeper
+```
+
+### 版本更新
+
+本镜像依赖 [PK](https://github.com/pandamelive/pk) 和 [SPDE](https://github.com/pandamelive/spde) 的 Release 二进制。
+
+当 PK 或 SPDE 发布新版本时，GitHub Actions 会自动触发本仓库的重新构建，拉取最新版本的二进制文件。
+
+### 合规检查
+
+本项目遵循 PandaNetOS 生态合规标准，提交 PR 前请确保：
+
+- README 格式符合标准库规范
+- 无敏感信息（密钥、Token 等）
+- CI 工作流完整（Compliance Check、Tag Guard）
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feat/awesome-feature`)
+3. 提交更改 (`git commit -m 'feat: add awesome feature'`)
+4. 推送到分支 (`git push origin feat/awesome-feature`)
+5. 创建 Pull Request
