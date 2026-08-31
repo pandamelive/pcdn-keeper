@@ -19,10 +19,7 @@ jobs:
       platforms: linux/amd64,linux/arm64
       push_to_ghcr: true
       push_to_dockerhub: true
-      dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
       push_to_aliyun: true
-      aliyun_registry: ${{ secrets.ALIYUN_ACR_REGISTRY }}
-      aliyun_namespace: ${{ secrets.ALIYUN_ACR_NAMESPACE }}
       tag_latest: true
       tag_sha: true
       fetch_upstream_versions: true
