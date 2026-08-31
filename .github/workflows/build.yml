@@ -13,103 +13,20 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-
-      - name: Get upstream versions
-        id: versions
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # 用 gh release view 获取 latest release 的 tag_name（自动去掉 v 前缀）
-          # 调试信息走 stderr，避免污染命令替换的返回值
-          get_latest_version() {
-            local repo=$1
-            local ver
-            ver=$(gh release view --repo "${repo}" --json tagName --jq '.tagName | ltrimstr("v")') || {
-              echo "ERROR: 无法获取 ${repo} 的 latest release" >&2
-              exit 1
-            }
-            if [ -z "${ver}" ] || [ "${ver}" = "null" ]; then
-              echo "ERROR: ${repo} 版本号无效: ${ver}" >&2
-              exit 1
-            fi
-            echo "${ver}"
-          }
-
-          # 默认从 latest release 获取版本号
-          PK_VER=$(get_latest_version "pandamelive/pk")
-          SPDE_VER=$(get_latest_version "pandamelive/spde")
-
-          # repository_dispatch 触发时优先使用传入的版本号（避免竞态：一个上游发了另一个还没发）
-          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            UPSTREAM="${{ github.event.client_payload.upstream }}"
-            DISPATCH_VERSION=$(echo "${{ github.event.client_payload.version }}" | sed 's/^v//')
-            if [ -n "${DISPATCH_VERSION}" ] && [ "${DISPATCH_VERSION}" != "null" ]; then
-              if [ "${UPSTREAM}" = "pk" ]; then
-                PK_VER="${DISPATCH_VERSION}"
-                echo "使用 dispatch 传入的 pk 版本: ${PK_VER}" >&2
-              elif [ "${UPSTREAM}" = "spde" ]; then
-                SPDE_VER="${DISPATCH_VERSION}"
-                echo "使用 dispatch 传入的 spde 版本: ${SPDE_VER}" >&2
-              fi
-            fi
-          fi
-
-          echo "pk_version=${PK_VER}" >> $GITHUB_OUTPUT
-          echo "spde_version=${SPDE_VER}" >> $GITHUB_OUTPUT
-          echo "combo_tag=pk-v${PK_VER}_spde-v${SPDE_VER}" >> $GITHUB_OUTPUT
-          echo "PK version: ${PK_VER}"
-          echo "SPDE version: ${SPDE_VER}"
-          echo "Combo tag: pk-v${PK_VER}_spde-v${SPDE_VER}"
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          registry: docker.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Login to Aliyun ACR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.ALIYUN_ACR_REGISTRY }}
-          username: ${{ secrets.ALIYUN_ACR_USERNAME }}
-          password: ${{ secrets.ALIYUN_ACR_PASSWORD }}
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          provenance: false
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            PK_VERSION=${{ steps.versions.outputs.pk_version }}
-            SPDE_VERSION=${{ steps.versions.outputs.spde_version }}
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/pcdn-keeper:latest
-            ghcr.io/${{ github.repository_owner }}/pcdn-keeper:${{ steps.versions.outputs.combo_tag }}
-            ghcr.io/${{ github.repository_owner }}/pcdn-keeper:sha-${{ github.sha }}
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/pcdn-keeper:latest
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/pcdn-keeper:${{ steps.versions.outputs.combo_tag }}
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/pcdn-keeper:sha-${{ github.sha }}
-            ${{ secrets.ALIYUN_ACR_REGISTRY }}/${{ secrets.ALIYUN_ACR_NAMESPACE }}/pcdn-keeper:latest
-            ${{ secrets.ALIYUN_ACR_REGISTRY }}/${{ secrets.ALIYUN_ACR_NAMESPACE }}/pcdn-keeper:${{ steps.versions.outputs.combo_tag }}
-            ${{ secrets.ALIYUN_ACR_REGISTRY }}/${{ secrets.ALIYUN_ACR_NAMESPACE }}/pcdn-keeper:sha-${{ github.sha }}
+    uses: PandaNetOS/PandaNetOS/.github/workflows/reusable-release-docker-image.yml@main
+    with:
+      image_name: pcdn-keeper
+      platforms: linux/amd64,linux/arm64
+      push_to_ghcr: true
+      push_to_dockerhub: true
+      dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+      push_to_aliyun: true
+      aliyun_registry: ${{ secrets.ALIYUN_ACR_REGISTRY }}
+      aliyun_namespace: ${{ secrets.ALIYUN_ACR_NAMESPACE }}
+      tag_latest: true
+      tag_sha: true
+      fetch_upstream_versions: true
+      upstream_repos: '["pandamelive/pk","pandamelive/spde"]'
+      combo_tag_format: 'pk-v{pk}_spde-v{spde}'
+      provenance: false
+    secrets: inherit
