@@ -96,27 +96,67 @@ start_pk() {
     log "[supervisor] pk pid=${PK_PID}"
 }
 
-# spde 数据目录持久化（node-id.json、运行历史等）
-SPDE_DATA_DIR="/pnos/download/data"
+# spde 数据目录持久化（node-id.json、run-history.jsonl）
+#
+# 路径必须带 spde-node 这一层：spde 用 exe 同级目录作为 root
+#   exe    = /pnos/download/spde
+#   root   = /pnos/download/spde-node
+#   data   = /pnos/download/spde-node/data      <-- 真实数据目录
+# 写成 /pnos/download/data 会链到一个 spde 从不读写的空目录
+SPDE_NODE_DIR="/pnos/download/spde-node"
+SPDE_DATA_DIR="${SPDE_NODE_DIR}/data"
 SPDE_DATA_PERSIST="${PK_WORK_DIR}/spde-data"
 
+# 任何异常都降级为告警并返回 1，绝不让持久化失败拖垮容器启动
 ensure_spde_data_persist() {
-    mkdir -p "${SPDE_DATA_PERSIST}"
-    if [ ! -L "${SPDE_DATA_DIR}" ]; then
-        if [ -d "${SPDE_DATA_DIR}" ] && [ ! -L "${SPDE_DATA_DIR}" ]; then
-            log "[init] 迁移 spde data 目录到持久化位置..."
-            cp -rn "${SPDE_DATA_DIR}/." "${SPDE_DATA_PERSIST}/" 2>/dev/null || true
-            rm -rf "${SPDE_DATA_DIR}"
-        fi
-        mkdir -p "$(dirname "${SPDE_DATA_DIR}")"
-        ln -sf "${SPDE_DATA_PERSIST}" "${SPDE_DATA_DIR}"
-        log "[init] spde data 目录已持久化: ${SPDE_DATA_DIR} -> ${SPDE_DATA_PERSIST}"
+    if ! mkdir -p "${SPDE_DATA_PERSIST}" 2>/dev/null; then
+        log "[warn] 无法创建持久化目录: ${SPDE_DATA_PERSIST}"
+        return 1
     fi
+
+    # 链接已存在且指向正确目标 -> 幂等跳过
+    if [ -L "${SPDE_DATA_DIR}" ]; then
+        if [ "$(readlink "${SPDE_DATA_DIR}")" = "${SPDE_DATA_PERSIST}" ]; then
+            return 0
+        fi
+        log "[init] spde data 链接指向异常($(readlink "${SPDE_DATA_DIR}"))，重建..."
+        rm -f "${SPDE_DATA_DIR}"
+    fi
+
+    # 真实目录 -> 迁移内容到持久化位置
+    if [ -d "${SPDE_DATA_DIR}" ]; then
+        if [ -z "$(ls -A "${SPDE_DATA_PERSIST}" 2>/dev/null)" ]; then
+            log "[init] 迁移 spde data: ${SPDE_DATA_DIR} -> ${SPDE_DATA_PERSIST}"
+            if ! cp -a "${SPDE_DATA_DIR}/." "${SPDE_DATA_PERSIST}/" 2>/dev/null; then
+                log "[warn] 复制 spde data 失败，保持原目录不建链"
+                return 1
+            fi
+        else
+            log "[init] 持久化目录已有数据，跳过迁移（保留现有 node-id）"
+        fi
+        if ! rm -rf "${SPDE_DATA_DIR}" 2>/dev/null; then
+            log "[warn] 无法删除原目录: ${SPDE_DATA_DIR}（可能是挂载点），跳过建链"
+            return 1
+        fi
+    fi
+
+    mkdir -p "$(dirname "${SPDE_DATA_DIR}")" 2>/dev/null
+    # 先清空再建链：目标是已存在目录时，ln -s 会把链接建到目录"内部"
+    rm -rf "${SPDE_DATA_DIR}" 2>/dev/null
+    if ln -s "${SPDE_DATA_PERSIST}" "${SPDE_DATA_DIR}" 2>/dev/null; then
+        log "[init] spde data 已持久化: ${SPDE_DATA_DIR} -> $(readlink "${SPDE_DATA_DIR}")"
+        return 0
+    fi
+
+    log "[warn] 建立 spde data 软链失败，将使用容器内目录（重建后 node-id 丢失）"
+    return 1
 }
 
 start_spde() {
     log "[supervisor] 启动 spde agent..."
-    ensure_spde_data_persist
+    # 持久化失败只告警，spde 仍照常启动（数据退化为容器内临时目录）
+    ensure_spde_data_persist \
+        || log "[warn] spde data 持久化未生效，容器重建后 node-id 会重新生成"
     local args="agent --master ${SPDE_MASTER}"
     if [ -n "${PK_TOKEN}" ]; then
         args="${args} --token ${PK_TOKEN}"
